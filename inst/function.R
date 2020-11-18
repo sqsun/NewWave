@@ -61,7 +61,7 @@ delayed_gamma_init <- function(k) {
 
 over_gamma <- function(x, V_sh, X_sh, beta_sh, gamma_sh, epsilon_gamma,
                        intervall){
-  j = attr(x,"block_id")
+  j = currentBlockId()
   Xbeta <- X_sh[j,] %*% beta_sh
   
   out <- solveRidgeRegression(mat = V_sh, y = as.vector(x - Xbeta),
@@ -112,7 +112,7 @@ delayed_beta_init <- function(k) {
 
 over_beta <- function(x, X_sh, V_sh,gamma_sh, beta_sh, epsilon_beta,
                       intervall){
-  j = attr(x,"block_id")
+  j = currentBlockId()
 
   Vgamma <- t(V_sh[j,] %*% gamma_sh)
   out <- solveRidgeRegression(mat=X_sh, y=as.vector(x - Vgamma),
@@ -144,21 +144,21 @@ delayed_ll <- function(k){
       refdim = dim(Y_sh[,intervall]),
       spacings = c(nrow(Y_sh[,intervall]), 1L)),
     BPPARAM = BiocParallel::SerialParam(),
-    X = X_sh, V = V_sh[intervall,,drop=FALSE], gamma = gamma_sh,
-    beta = beta_sh[,intervall,drop=FALSE], W = W_sh, alpha = alpha_sh[,intervall],
-    zeta = zeta_sh[intervall], intervall = intervall)))
+    X_sh = X_sh, V_sh = V_sh[intervall,,drop=FALSE], gamma_sh = gamma_sh,
+    beta_sh = beta_sh[,intervall,drop=FALSE], W_sh = W_sh, alpha_sh = alpha_sh[,intervall],
+    zeta_sh = zeta_sh[intervall], intervall = intervall)))
   
   val
 }
 
-over_ll <- function(x, X, V, gamma, beta, W, alpha, zeta, intervall){
+over_ll <- function(x, X_sh, V_sh, gamma_sh, beta_sh, W_sh, alpha_sh, zeta_sh, intervall){
   
-  j = attr(x,"block_id")
+  j = currentBlockId()
   
-  theta <- exp(zeta[j])
+  theta <- exp(zeta_sh[j])
 
-  mu <- exp(X %*% beta[,j] + t(V[j,] %*% gamma) +
-              W %*% alpha[,j])
+  mu <- exp(X_sh %*% beta_sh[,j] + t(V_sh[j,] %*% gamma_sh) +
+              W_sh %*% alpha_sh[,j])
   
   loglik <- nb.loglik(x, mu=mu, theta)
   
@@ -335,23 +335,23 @@ optim_genwise_dispersion_delayed <- function(k,Y, num_gene, iter) {
     grid = DelayedArray::RegularArrayGrid(
       refdim = dim(Y[,intervall]),
       spacings = c(nrow(Y[,intervall]), 1L)),
-    BPPARAM = BiocParallel::SerialParam(),
-    zeta = zeta_sh[intervall],
-    intervall = intervall, X = X_sh,
-    beta = beta_sh[,intervall,drop=FALSE], V = V_sh[intervall,,drop=FALSE],
-    gamma  = gamma_sh, W = W_sh, alpha = alpha_sh[,intervall])
+    BPPARAM = NULL,
+    zeta_tmp = zeta_sh[intervall],
+    intervall = intervall, X_tmp = X_sh,
+    beta_tmp = beta_sh[,intervall,drop=FALSE], V_tmp = V_sh[intervall,,drop=FALSE],
+    gamma_tmp  = gamma_sh, W_tmp = W_sh, alpha_tmp = alpha_sh[,intervall])
   
 }
 
-over_optd <- function(x, zeta, intervall, X,
-                      beta, V, gamma, W, alpha){
+over_optd <- function(x, zeta_tmp, intervall, X_tmp,
+                      beta_tmp, V_tmp, gamma_tmp, W_tmp, alpha_tmp){
   
-  j = attr(x,"block_id")
-  mu <- exp(X %*% beta[,j] + t(V[j,] %*% gamma) +
-              W %*% alpha[,j])
+  j = currentBlockId()
+  mu <- exp(X_tmp %*% beta_tmp[,j] + t(V_tmp[j,] %*% gamma_tmp) +
+              W_tmp %*% alpha_tmp[,j])
   res <-optim(fn=locfun,
         gr=locgrad,
-        par=zeta[j],
+        par=zeta_tmp[j],
         Y = x,
         mu = mu,
         control=list(fnscale=-1,trace=0),
@@ -438,24 +438,24 @@ optimr_delayed <- function(k, num_gene, iter) {
         grid = DelayedArray::RegularArrayGrid(
             refdim = dim(Y_sh[,intervall]),
             spacings = c(nrow(Y_sh[,intervall]), 1L)),
-        BPPARAM = BiocParallel::SerialParam(),
-        beta = beta_sh[,intervall, drop = FALSE],
-        alpha = alpha_sh[,intervall, drop = FALSE],X = X_sh,
-        W = W_sh, V = V_sh[intervall,,drop = FALSE], gamma = gamma_sh, 
-        zeta = zeta_sh[intervall], n = nrow(Y_sh),epsilonright = epsilonright,
+        BPPARAM = NULL,
+        beta_tmp = beta_sh[,intervall, drop = FALSE],
+        alpha_tmp = alpha_sh[,intervall, drop = FALSE],X_tmp = X_sh,
+        W_tmp = W_sh, V_tmp = V_sh[intervall,,drop = FALSE], gamma_tmp = gamma_sh, 
+        zeta_tmp = zeta_sh[intervall], n = nrow(Y_sh),epsilonright = epsilonright,
         intervall = intervall
     )
     
   }
 
 
-over_optr <- function(x, beta, alpha, X , W,
-                      V , gamma , zeta,
+over_optr <- function(x, beta_tmp, alpha_tmp, X_tmp , W_tmp,
+                      V_tmp , gamma_tmp , zeta_tmp,
                       n , epsilonright, intervall ){
-    j = attr(x,"block_id")
+    j = currentBlockId()
     out <- optimright_fun_nb(
-      beta[,j], alpha[,j], x, X,
-      W, V[j,], gamma, zeta[j],
+      beta_tmp[,j], alpha_tmp[,j], x, X_tmp,
+      W_tmp, V_tmp[j,], gamma_tmp, zeta_tmp[j],
       n, epsilonright)$par
     
     params <- split_params(out, "right")
@@ -532,22 +532,22 @@ optiml_delayed <- function(k, num_cell, iter){
         grid = DelayedArray::RegularArrayGrid(
           refdim = dim(Y_sh[intervall,]),
           spacings = c( 1L, ncol(Y_sh[intervall,]))),
-        BPPARAM = BiocParallel::SerialParam(),
-        gamma = gamma_sh[,intervall, drop = FALSE],
-        W = W_sh[intervall,, drop = FALSE], V = V_sh,
-        alpha = alpha_sh, X = X_sh[intervall,, drop = FALSE], beta = beta_sh,  
-        zeta = zeta_sh, epsilonleft = epsilonleft,
+        BPPARAM = NULL,
+        gamma_tmp = gamma_sh[,intervall, drop = FALSE],
+        W_tmp = W_sh[intervall,, drop = FALSE], V_tmp = V_sh,
+        alpha_tmp = alpha_sh, X_tmp = X_sh[intervall,, drop = FALSE], beta_tmp = beta_sh,  
+        zeta_tmp = zeta_sh, epsilonleft = epsilonleft,
         intervall = intervall)
     
   }
 
-over_optl <- function(x, gamma,  W, V , alpha,
-                      X ,beta, zeta ,
+over_optl <- function(x, gamma_tmp,  W_tmp, V_tmp , alpha_tmp,
+                      X_tmp ,beta_tmp, zeta_tmp ,
                       epsilonleft, intervall){
-    i = attr(x,"block_id")
-    out <- optimleft_fun_nb(gamma[,i],
-                            W[i,], x , V, alpha,
-                            X[i,], beta, zeta, epsilonleft)$par
+  i = currentBlockId()
+  out <- optimleft_fun_nb(gamma_tmp[,i],
+                          W_tmp[i,], x , V_tmp, alpha_tmp,
+                          X_tmp[i,], beta_tmp, zeta_tmp, epsilonleft)$par
     
     params <- split_params(out, eq = "left")
     gamma_sh[,intervall[i]] <- params$gamma
