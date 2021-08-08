@@ -14,7 +14,7 @@ Description: A model designed for dimensionality reduction and batch effect
     It assumes a negative binomial distribution for the data with a dispersion
     parameter that can be both commonwise across gene both genewise. 
 Depends: 
-    R (>= 4.0),
+    R (>= 3.6),
     SummarizedExperiment
 Imports:
     methods,
